@@ -30,4 +30,4 @@ RUN mkdir -p /app/models
 EXPOSE 8000 8501
 
 # Запуск обоих сервисов через простой скрипт
-CMD ["sh", "-c", "uvicorn fastapi_llm.main:app --host 0.0.0.0 --port 8000 & streamlit run streamlit.py --server.port=8501 --server.address=0.0.0.0"]
+CMD ["sh", "-c", "uvicorn fastapi_llm.main:app --host 0.0.0.0 --port 8000 & streamlit run chat_ui.py --server.port=8501 --server.address=0.0.0.0"]
