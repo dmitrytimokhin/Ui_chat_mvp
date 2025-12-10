@@ -1,11 +1,12 @@
 import requests
+import os
 import logging
 from typing import List
 from .models import ChatMessage
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/api/chat")
 
 _SYSTEM_PROMPT = (
     "Ты — вежливый и точный ассистент. Отвечай кратко, по делу и только на русском языке. "
