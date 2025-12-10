@@ -10,17 +10,17 @@ from .models import ChatMessage
 
 logger = logging.getLogger(__name__)
 
-_QWEN_MODEL_NAME = "Qwen/Qwen3-4B"
+_QWEN_MODEL_NAME = "Qwen/Qwen3-1.7B"
 _tokenizer = None
 _model = None
 
 def _load_qwen() -> Tuple:
-    """Ленивая загрузка Qwen3-4B с оптимизацией под MPS (M1/M2)."""
+    """Ленивая загрузка Qwen3-1.7B с оптимизацией под MPS (M1/M2)."""
     global _tokenizer, _model
     if _tokenizer is not None:
         return _tokenizer, _model
 
-    logger.info("Загрузка Qwen3-4B (4B, float16) через transformers + accelerate...")
+    logger.info("Загрузка Qwen3-1.7B (1.7B, float16) через transformers + accelerate...")
 
     # На M1: MPS поддерживает float16, но не int8/4 (bitsandbytes не работает)
     device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -64,9 +64,9 @@ def _load_qwen() -> Tuple:
             )
         except Exception as e2:
             logger.error(f"Обе попытки загрузки провалились: {e2}")
-            raise RuntimeError("Не удалось загрузить Qwen3-4B")
+            raise RuntimeError("Не удалось загрузить Qwen3-1.7B")
 
-    logger.info("✅ Qwen3-4B успешно загружена (float16, device_map=auto)")
+    logger.info("✅ Qwen3-1.7B успешно загружена (float16, device_map=auto)")
     return _tokenizer, _model
 
 
@@ -77,7 +77,7 @@ def query_qwen(
     max_tokens: int
 ) -> str:
     """
-    Генерирует ответ с использованием Qwen3-4B (4B параметров).
+    Генерирует ответ с использованием Qwen3-1.7B (1.7B параметров).
     История обрезается по токенам (до 28k контекста).
     """
     from .token_utils import truncate_history
@@ -136,9 +136,9 @@ def query_qwen(
         elif "</think>" in decoded:
             decoded = decoded.split("</think>")[-1].strip()
 
-        logger.debug("✅ Ответ от Qwen3-4B получен")
+        logger.debug("✅ Ответ от Qwen3-1.7B получен")
         return decoded
 
     except Exception as e:
-        logger.error(f"Ошибка генерации в Qwen3-4B: {e}")
-        raise RuntimeError(f"Ошибка Qwen3-4B: {e}")
+        logger.error(f"Ошибка генерации в Qwen3-1.7B: {e}")
+        raise RuntimeError(f"Ошибка Qwen3-1.7B: {e}")
