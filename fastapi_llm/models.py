@@ -1,20 +1,20 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class ChatMessage(BaseModel):
-    role: str  # "user" или "assistant"
+    """Представление одного сообщения в диалоге."""
+    role: str = Field(..., description="'user' или 'assistant'")
     text: str
 
 class ChatRequest(BaseModel):
+    """Запрос к /chat эндпоинту."""
     prompt: str
-    history: List[ChatMessage]
-    mode: str  # "yandex" или "local"
-    model: Optional[str] = "gpt_pro"  # только для Yandex
-    temperature: float = 0.0
-    max_tokens: int = 500
+    history: List[ChatMessage] = Field(default_factory=list)
+    model_alias: str = Field(..., description="'phi3_ollama' или 'qwen_transformers'")
+    temperature: float = Field(0.0, ge=0.0, le=1.0)
+    max_tokens: int = Field(512, ge=1, le=4096)
 
 class ChatResponse(BaseModel):
+    """Ответ от LLM-движка."""
     response: str
-    total_tokens: Optional[int] = None
     error: Optional[str] = None
-    
