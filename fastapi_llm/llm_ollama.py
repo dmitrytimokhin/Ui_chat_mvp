@@ -1,17 +1,28 @@
-import requests
+"""
+Клиент для взаимодействия с локальным Ollama-сервером.
+Отправляет запросы к модели phi3, развернутой на хосте.
+Учитывает лимит контекста через token_utils.
+"""
+
 import os
 import logging
-from typing import List
+import requests
+from typing import List, Dict
+from requests.exceptions import RequestException, Timeout, ConnectionError
+
 from .models import ChatMessage
+from .utils import truncate_and_build_messages, log_request_start, EngineError
+
+# === Константы ===
+OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/api/chat")
+REQUEST_TIMEOUT_SECONDS: int = 120
+MODEL_NAME: str = "phi3"
+# phi3 поддерживает до ~4096 токенов
+MAX_CONTEXT_LENGTH: int = 4096
+RESERVED_TOKENS_FOR_RESPONSE: int = 512
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/api/chat")
-
-_SYSTEM_PROMPT = (
-    "Ты — вежливый и точный ассистент. Отвечай кратко, по делу и только на русском языке. "
-    "Если вопрос неясен — уточни. Не выдумывай факты."
-)
 
 def query_ollama(
     prompt: str,
@@ -20,29 +31,20 @@ def query_ollama(
     max_tokens: int
 ) -> str:
     """
-    Отправляет запрос к локальному Ollama (модель phi3).
-    Автоматически обрезает историю при превышении лимита контекста.
+    Отправляет запрос к локальному Ollama-серверу и возвращает сгенерированный ответ.
+    Автоматически обрезает историю, чтобы уложиться в лимит контекста phi3.
     """
-    from .token_utils import truncate_history
+    log_request_start("Ollama/phi3", temperature, max_tokens)
 
-    # Ограничиваем историю (phi3 имеет контекст ~4096 токенов)
-    safe_history = truncate_history(
-        history=history,
+    # === ОБРЕЗКА ИСТОРИИ ПО ТОКЕНАМ И ПОДГОТОВКА СООБЩЕНИЙ ===
+    messages, safe_history = truncate_and_build_messages(
         prompt=prompt,
-        max_total_tokens=3584,  # оставляем запас
-        reserved_for_response=max_tokens
+        history=history,
+        max_total_tokens=MAX_CONTEXT_LENGTH - RESERVED_TOKENS_FOR_RESPONSE,
+        reserved_for_response=max_tokens,
     )
-
-    messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
-    for msg in safe_history:
-        messages.append({
-            "role": "user" if msg.role == "user" else "assistant",
-            "content": msg.text
-        })
-    messages.append({"role": "user", "content": prompt})
-
     payload = {
-        "model": "phi3",
+        "model": MODEL_NAME,
         "messages": messages,
         "stream": False,
         "options": {
@@ -52,13 +54,46 @@ def query_ollama(
     }
 
     try:
-        logger.debug("Отправка запроса в Ollama...")
-        resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
-        resp.raise_for_status()
-        content = resp.json().get("message", {}).get("content", "").strip()
-        logger.debug("Получен ответ от Ollama")
+        logger.debug(f"Отправка POST-запроса к {OLLAMA_URL}")
+        response = requests.post(
+            url=OLLAMA_URL,
+            json=payload,
+            timeout=REQUEST_TIMEOUT_SECONDS
+        )
+        response.raise_for_status()
+
+        response_data = response.json()
+        content = response_data.get("message", {}).get("content", "").strip()
+
+        if not content:
+            raise ValueError("Пустой ответ от Ollama")
+
+        logger.info(f"Успешно получен ответ от Ollama (длина: {len(content)} символов)")
         return content
+
+    except ConnectionError as e:
+        error_msg = "Не удалось подключиться к Ollama (ConnectionError)"
+        logger.error(f"{error_msg}: {e}")
+        raise EngineError(f"Ollama недоступна: {error_msg}") from e
+
+    except Timeout as e:
+        error_msg = "Таймаут при обращении к Ollama"
+        logger.error(f"{error_msg}: {e}")
+        raise EngineError(f"Ollama не ответила за {REQUEST_TIMEOUT_SECONDS} секунд") from e
+
+    except RequestException as e:
+        status = e.response.status_code if e.response else "unknown"
+        error_msg = f"Ошибка HTTP-запроса к Ollama: {status}"
+        logger.error(f"{error_msg}: {e}")
+        raise EngineError(f"Ошибка связи с Ollama: {error_msg}") from e
+
+    except (ValueError, KeyError, TypeError) as e:
+        error_msg = "Некорректный формат ответа от Ollama"
+        logger.error(f"{error_msg}: {e}")
+        raise EngineError(f"{error_msg}: {e}") from e
+
     except Exception as e:
-        logger.error(f"Ошибка при вызове Ollama: {e}")
-        raise RuntimeError(f"Ollama недоступна: {e}")
+        error_msg = "Неожиданная ошибка при работе с Ollama"
+        logger.error(f"{error_msg}: {e}")
+        raise EngineError(f"{error_msg}: {e}") from e
         

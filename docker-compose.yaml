@@ -1,20 +1,16 @@
 version: '3.8'
-
 services:
   llm-chat:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.app
     ports:
-      - "8000:8000"   # FastAPI
-      - "8501:8501"   # Streamlit
-    volumes:
-      # Опционально: монтируйте папку с моделью, чтобы не скачивать каждый раз
-      - ./models:/app/models
-      # Если вы хотите кэшировать Hugging Face модели
-      - ~/.cache/huggingface:/root/.cache/huggingface
+      - "8501:8501"
+      - "8000:8000"
     environment:
       - PYTHONPATH=/app
-    # На macOS/Linux: разрешаем доступ к Ollama на хосте
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Для M1: явно указываем архитектуру (не обязательно, но безопасно)
-    platform: linux/arm64
+      - PYTHONWARNINGS=ignore::FutureWarning
+      - HF_HOME=/root/.cache/huggingface
+    restart: unless-stopped
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface

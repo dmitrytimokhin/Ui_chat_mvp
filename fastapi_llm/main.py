@@ -1,12 +1,13 @@
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .models import ChatRequest, ChatResponse
 from .llm_ollama import query_ollama
 from .llm_qwen import query_qwen
+from .utils import configure_logging, EngineError
 
-# Настройка логгера
-logging.basicConfig(level=logging.INFO)
+# Настройка логгера через utils
+configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Hybrid LLM Gateway (Ollama + Qwen)")
@@ -28,22 +29,28 @@ def chat(request: ChatRequest):
                 prompt=request.prompt,
                 history=request.history,
                 temperature=request.temperature,
-                max_tokens=request.max_tokens
+                max_tokens=request.max_tokens,
             )
         elif request.model_alias == "qwen_transformers":
             response_text = query_qwen(
                 prompt=request.prompt,
                 history=request.history,
                 temperature=request.temperature,
-                max_tokens=request.max_tokens
+                max_tokens=request.max_tokens,
             )
         else:
             raise ValueError("Неподдерживаемая модель")
 
         return ChatResponse(response=response_text)
 
+    except EngineError as e:
+        # Предсказуемые ошибки от адаптеров — помечаем как пользовательские ошибки
+        error_msg = str(e)
+        logger.warning(f"Движок вернул ошибку: {error_msg}")
+        return ChatResponse(response="", error=error_msg)
+
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"Ошибка в /chat: {error_msg}")
+        logger.exception("Непредвиденная ошибка в /chat")
         return ChatResponse(response="", error=error_msg)
         
