@@ -1,6 +1,7 @@
 # fastapi_llm/llm_qwen.py
 import logging
 import torch
+import gc
 from typing import List, Optional, Tuple
 from pathlib import Path
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, GenerationConfig
@@ -14,6 +15,29 @@ logger = logging.getLogger(__name__)
 _QWEN_MODEL_NAME = "Qwen/Qwen3-0.6B"
 _tokenizer = None
 _model = None
+_models_initialized = False
+
+def init_models() -> None:
+    """Инициализирует модели при старте приложения.
+    
+    Вызывается один раз при запуске FastAPI приложения.
+    """
+    global _models_initialized
+    if _models_initialized:
+        logger.info("Модели уже инициализированы, пропускаем...")
+        return
+    
+    logger.info("=" * 60)
+    logger.info("ИНИЦИАЛИЗАЦИЯ МОДЕЛЕЙ ПРИ СТАРТЕ ПРИЛОЖЕНИЯ")
+    logger.info("=" * 60)
+    
+    _load_qwen()
+    
+    _models_initialized = True
+    logger.info("=" * 60)
+    logger.info("✅ ВСЕ МОДЕЛИ УСПЕШНО ЗАГРУЖЕНЫ И ГОТОВЫ К ИСПОЛЬЗОВАНИЮ")
+    logger.info("=" * 60)
+
 
 def _load_qwen() -> Tuple:
     """Ленивая загрузка Qwen3-0.6B с оптимизацией под MPS (M1/M2)."""
@@ -149,8 +173,34 @@ def query_qwen(
             decoded = decoded.split("</think>")[-1].strip()
 
         logger.debug("✅ Ответ от Qwen3-0.6B получен")
+        
+        # Очистка памяти после генерации
+        _cleanup_memory()
+        
         return decoded
 
     except Exception as e:
         logger.error(f"Ошибка генерации в Qwen3-0.6B: {e}")
+        # Очистка памяти даже при ошибке
+        _cleanup_memory()
         raise EngineError(f"Ошибка Qwen3-0.6B: {e}") from e
+
+
+def _cleanup_memory() -> None:
+    """Очищает память: освобождает неиспользуемые объекты и кэш CUDA."""
+    try:
+        # Очистка Python кэша мусора
+        gc.collect()
+        
+        # Если доступна CUDA, очищаем её кэш
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        
+        # Если доступна MPS (Apple Silicon), очищаем её память
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        
+        logger.debug("✅ Память успешно очищена (gc + cuda/mps cache)")
+    except Exception as e:
+        logger.warning(f"Не удалось полностью очистить память: {e}")

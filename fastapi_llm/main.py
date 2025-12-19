@@ -1,16 +1,40 @@
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .models import ChatRequest, ChatResponse
 from .llm_ollama import query_ollama
-from .llm_qwen import query_qwen
+from .llm_qwen import query_qwen, init_models
 from .utils import configure_logging, EngineError
 
 # Настройка логгера через utils
 configure_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Hybrid LLM Gateway (Ollama + Qwen)")
+
+# Event при старте приложения
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Управление жизненным циклом приложения.
+    
+    На старте: инициализирует все модели.
+    На завершение: логирует остановку.
+    """
+    # Startup: инициализируем модели при старте uvicorn
+    logger.info("🚀 Приложение стартует... Инициализируем модели...")
+    init_models()
+    logger.info("✅ Приложение полностью готово к работе!")
+    
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Приложение завершает работу...")
+
+
+app = FastAPI(
+    title="Hybrid LLM Gateway (Ollama + Qwen)",
+    lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
