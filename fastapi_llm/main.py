@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .models import ChatRequest, ChatResponse
 from .llm_ollama import query_ollama
-from .llm_qwen import query_qwen, init_models
+from .llm_qwen import query_qwen, init_models, _cleanup_memory
 from .utils import configure_logging, EngineError
 
 # Настройка логгера через utils
@@ -22,6 +22,7 @@ async def lifespan(app: FastAPI):
     """
     # Startup: инициализируем модели при старте uvicorn
     logger.info("🚀 Приложение стартует... Инициализируем модели...")
+    _cleanup_memory()
     init_models()
     logger.info("✅ Приложение полностью готово к работе!")
     
