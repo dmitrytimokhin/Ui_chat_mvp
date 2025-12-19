@@ -1,4 +1,4 @@
-# fastapi_llm/llm_qwen.py
+# fastapi_llm/models/transformers/llm_qwen.py
 import logging
 import torch
 import gc
@@ -7,8 +7,8 @@ from pathlib import Path
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, GenerationConfig
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 
-from .models import ChatMessage
-from .utils import truncate_and_build_messages, log_request_start, cleanup_memory, EngineError, SYSTEM_PROMPT
+from fastapi_llm.utils.entities import ChatMessage
+from fastapi_llm.utils.utils import truncate_and_build_messages, log_request_start, cleanup_memory, EngineError, SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -173,10 +173,8 @@ def query_qwen(
             decoded = decoded.split("</think>")[-1].strip()
 
         logger.debug("✅ Ответ от Qwen3 получен")
-        
         # Очистка памяти после генерации
         cleanup_memory()
-        
         return decoded
 
     except Exception as e:

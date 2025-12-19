@@ -3,10 +3,11 @@ import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .models import ChatRequest, ChatResponse
-from .llm_ollama import query_ollama
-from .llm_qwen import query_qwen, init_models
-from .utils import configure_logging, cleanup_memory, EngineError
+
+from fastapi_llm.utils.entities import ChatRequest, ChatResponse
+from fastapi_llm.models.ollama.llm_ollama import query_ollama
+from fastapi_llm.models.transformers.llm_qwen import query_qwen, init_models
+from fastapi_llm.utils.utils import configure_logging, cleanup_memory, EngineError
 
 # Настройка логгера через utils
 configure_logging()
@@ -49,6 +50,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     logger.info(f"Получен запрос к модели: {request.model_alias}")
@@ -88,4 +90,3 @@ async def chat(request: ChatRequest):
         error_msg = str(e)
         logger.exception("Непредвиденная ошибка в /chat")
         return ChatResponse(response="", error=error_msg)
-        

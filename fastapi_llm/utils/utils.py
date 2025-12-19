@@ -1,15 +1,13 @@
 """
 Утилиты для LLM-адаптеров: токенизация, обрезка истории,
 логирование и общие исключения.
-
-Этот модуль объединяет ранее разнесённую логику из
-`llm_common.py` и `token_utils.py` для удобства и единообразия.
 """
 from typing import List, Dict, Tuple, Optional
 import logging
 import os
+import gc
 
-from .models import ChatMessage
+from fastapi_llm.utils.entities import ChatMessage
 
 try:
     import tiktoken
@@ -126,13 +124,21 @@ def cleanup_memory() -> None:
         gc.collect()
         
         # Если доступна CUDA, очищаем её кэш
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except Exception:
+            pass
         
         # Если доступна MPS (Apple Silicon), очищаем её память
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+        except Exception:
+            pass
         
         logger.debug("✅ Память успешно очищена (gc + cuda/mps cache)")
     except Exception as e:

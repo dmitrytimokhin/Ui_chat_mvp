@@ -1,7 +1,6 @@
 """
+fastapi_llm/models/ollama/llm_ollama.py
 Клиент для взаимодействия с локальным Ollama-сервером.
-Отправляет запросы к модели phi3, развернутой на хосте.
-Учитывает лимит контекста через token_utils.
 """
 
 import os
@@ -10,14 +9,14 @@ import requests
 from typing import List, Dict
 from requests.exceptions import RequestException, Timeout, ConnectionError
 
-from .models import ChatMessage
-from .utils import truncate_and_build_messages, log_request_start, EngineError
+from fastapi_llm.utils.entities import ChatMessage
+from fastapi_llm.utils.utils import truncate_and_build_messages, log_request_start, EngineError
 
 # === Константы ===
 OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/api/chat")
 REQUEST_TIMEOUT_SECONDS: int = 120
-MODEL_NAME: str = "phi3"
-# phi3 поддерживает до ~4096 токенов
+MODEL_NAME: str = "phi"
+# phi поддерживает до ~4096 токенов
 MAX_CONTEXT_LENGTH: int = 4096
 RESERVED_TOKENS_FOR_RESPONSE: int = 512
 
@@ -33,7 +32,7 @@ def query_ollama(
 ) -> str:
     """
     Отправляет запрос к локальному Ollama-серверу и возвращает сгенерированный ответ.
-    Автоматически обрезает историю, чтобы уложиться в лимит контекста phi3.
+    Автоматически обрезает историю, чтобы уложиться в лимит контекста.
     """
     engine_name = f"Ollama/{model_name or MODEL_NAME}"
     log_request_start(engine_name, temperature, max_tokens)
@@ -98,4 +97,3 @@ def query_ollama(
         error_msg = "Неожиданная ошибка при работе с Ollama"
         logger.error(f"{error_msg}: {e}")
         raise EngineError(f"{error_msg}: {e}") from e
-        
