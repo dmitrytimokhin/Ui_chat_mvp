@@ -28,13 +28,15 @@ def query_ollama(
     prompt: str,
     history: List[ChatMessage],
     temperature: float,
-    max_tokens: int
+    max_tokens: int,
+    model_name: str = None,
 ) -> str:
     """
     Отправляет запрос к локальному Ollama-серверу и возвращает сгенерированный ответ.
     Автоматически обрезает историю, чтобы уложиться в лимит контекста phi3.
     """
-    log_request_start("Ollama/phi3", temperature, max_tokens)
+    engine_name = f"Ollama/{model_name or MODEL_NAME}"
+    log_request_start(engine_name, temperature, max_tokens)
 
     # === ОБРЕЗКА ИСТОРИИ ПО ТОКЕНАМ И ПОДГОТОВКА СООБЩЕНИЙ ===
     messages, safe_history = truncate_and_build_messages(
@@ -44,7 +46,7 @@ def query_ollama(
         reserved_for_response=max_tokens,
     )
     payload = {
-        "model": MODEL_NAME,
+        "model": model_name or MODEL_NAME,
         "messages": messages,
         "stream": False,
         "options": {

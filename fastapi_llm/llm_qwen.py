@@ -8,11 +8,11 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 
 from .models import ChatMessage
-from .utils import truncate_and_build_messages, log_request_start, EngineError, SYSTEM_PROMPT
+from .utils import truncate_and_build_messages, log_request_start, cleanup_memory, EngineError, SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-_QWEN_MODEL_NAME = "Qwen/Qwen3-0.6B"
+_QWEN_MODEL_NAME = "Qwen/Qwen3-1.7B"
 _tokenizer = None
 _model = None
 _models_initialized = False
@@ -40,12 +40,12 @@ def init_models() -> None:
 
 
 def _load_qwen() -> Tuple:
-    """Ленивая загрузка Qwen3-0.6B с оптимизацией под MPS (M1/M2)."""
+    """Ленивая загрузка Qwen3 с оптимизацией под MPS (M1/M2)."""
     global _tokenizer, _model
     if _tokenizer is not None:
         return _tokenizer, _model
 
-    logger.info("Загрузка Qwen3-0.6B (0.6B, float16) через transformers + accelerate...")
+    logger.info("Загрузка Qwen3 (float16) через transformers + accelerate...")
 
     # На M1: MPS поддерживает float16, но не int8/4 (bitsandbytes не работает)
     device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -90,9 +90,9 @@ def _load_qwen() -> Tuple:
             )
         except Exception as e2:
             logger.error(f"Обе попытки загрузки провалились: {e2}")
-            raise RuntimeError("Не удалось загрузить Qwen3-0.6B")
+            raise RuntimeError("Не удалось загрузить Qwen3")
 
-    logger.info("✅ Qwen3-0.6B успешно загружена (float16, device_map=auto)")
+    logger.info("✅ Qwen3 успешно загружена (float16, device_map=auto)")
     return _tokenizer, _model
 
 
@@ -103,7 +103,7 @@ def query_qwen(
     max_tokens: int
 ) -> str:
     """
-    Генерирует ответ с использованием Qwen3-0.6B (0.6B параметров).
+    Генерирует ответ с использованием Qwen3.
     История обрезается по токенам (до 28k контекста).
     """
     log_request_start("Qwen/transformers", temperature, max_tokens)
@@ -155,7 +155,7 @@ def query_qwen(
     )
 
     try:
-        logger.debug("Запуск генерации через Qwen3-0.6B...")
+        logger.debug("Запуск генерации через Qwen3...")
         with torch.no_grad():  # экономия памяти
             outputs = model.generate(
                 input_ids=input_ids,
@@ -172,35 +172,15 @@ def query_qwen(
         elif "</think>" in decoded:
             decoded = decoded.split("</think>")[-1].strip()
 
-        logger.debug("✅ Ответ от Qwen3-0.6B получен")
+        logger.debug("✅ Ответ от Qwen3 получен")
         
         # Очистка памяти после генерации
-        _cleanup_memory()
+        cleanup_memory()
         
         return decoded
 
     except Exception as e:
-        logger.error(f"Ошибка генерации в Qwen3-0.6B: {e}")
+        logger.error(f"Ошибка генерации в Qwen3: {e}")
         # Очистка памяти даже при ошибке
-        _cleanup_memory()
-        raise EngineError(f"Ошибка Qwen3-0.6B: {e}") from e
-
-
-def _cleanup_memory() -> None:
-    """Очищает память: освобождает неиспользуемые объекты и кэш CUDA."""
-    try:
-        # Очистка Python кэша мусора
-        gc.collect()
-        
-        # Если доступна CUDA, очищаем её кэш
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-        
-        # Если доступна MPS (Apple Silicon), очищаем её память
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
-        
-        logger.debug("✅ Память успешно очищена (gc + cuda/mps cache)")
-    except Exception as e:
-        logger.warning(f"Не удалось полностью очистить память: {e}")
+        cleanup_memory()
+        raise EngineError(f"Ошибка Qwen3: {e}") from e

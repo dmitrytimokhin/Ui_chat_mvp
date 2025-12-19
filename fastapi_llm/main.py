@@ -1,11 +1,12 @@
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .models import ChatRequest, ChatResponse
 from .llm_ollama import query_ollama
-from .llm_qwen import query_qwen, init_models, _cleanup_memory
-from .utils import configure_logging, EngineError
+from .llm_qwen import query_qwen, init_models
+from .utils import configure_logging, cleanup_memory, EngineError
 
 # Настройка логгера через utils
 configure_logging()
@@ -20,9 +21,12 @@ async def lifespan(app: FastAPI):
     На старте: инициализирует все модели.
     На завершение: логирует остановку.
     """
-    # Startup: инициализируем модели при старте uvicorn
-    logger.info("🚀 Приложение стартует... Инициализируем модели...")
-    _cleanup_memory()
+    # Startup: предварительная очистка кэша и инициализация моделей
+    logger.info("🚀 Приложение стартует... Очищаем кэш и инициализируем модели...")
+    try:
+        cleanup_memory()
+    except Exception:
+        logger.warning("Не удалось очистить кэш перед стартом, продолжаем")
     init_models()
     logger.info("✅ Приложение полностью готово к работе!")
     
@@ -46,22 +50,28 @@ app.add_middleware(
 )
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
+async def chat(request: ChatRequest):
     logger.info(f"Получен запрос к модели: {request.model_alias}")
     try:
-        if request.model_alias == "phi3_ollama":
-            response_text = query_ollama(
-                prompt=request.prompt,
-                history=request.history,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
+        if request.model_alias == "ollama":
+            # model variant can be provided in request.ollama_model
+            model_name = request.ollama_model or "phi"
+            # run blocking I/O in threadpool
+            response_text = await asyncio.to_thread(
+                query_ollama,
+                request.prompt,
+                request.history,
+                request.temperature,
+                request.max_tokens,
+                model_name,
             )
-        elif request.model_alias == "qwen_transformers":
-            response_text = query_qwen(
-                prompt=request.prompt,
-                history=request.history,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
+        elif request.model_alias == "qwen_transformers" or request.model_alias == "Qwen3":
+            response_text = await asyncio.to_thread(
+                query_qwen,
+                request.prompt,
+                request.history,
+                request.temperature,
+                request.max_tokens,
             )
         else:
             raise ValueError("Неподдерживаемая модель")

@@ -117,3 +117,23 @@ def truncate_and_build_messages(
 def log_request_start(engine_name: str, temperature: float, max_tokens: int) -> None:
     logger.info(f"Запрос к движку: {engine_name}")
     logger.debug(f"Параметры генерации: temperature={temperature}, max_tokens={max_tokens}")
+
+
+def cleanup_memory() -> None:
+    """Очищает память: освобождает неиспользуемые объекты и кэш CUDA."""
+    try:
+        # Очистка Python кэша мусора
+        gc.collect()
+        
+        # Если доступна CUDA, очищаем её кэш
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        
+        # Если доступна MPS (Apple Silicon), очищаем её память
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        
+        logger.debug("✅ Память успешно очищена (gc + cuda/mps cache)")
+    except Exception as e:
+        logger.warning(f"Не удалось полностью очистить память: {e}")

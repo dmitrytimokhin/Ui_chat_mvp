@@ -23,9 +23,15 @@ if page == "О проекте":
 
 elif page == "Чат":
     st.title("💬 Чат с локальной LLM")
-    model_choice = st.sidebar.selectbox("Модель:", ["phi3_ollama", "qwen_transformers"], index=0)
+    model_choice = st.sidebar.selectbox("Модель:", ["ollama", "Qwen3"], index=0)
+    # Если выбрали ollama — показываем вариант (phi / qwen_lite / qwen_pro)
+    ollama_variant = None
+    if model_choice == "ollama":
+        ollama_variant = st.sidebar.selectbox("Ollama модель:", ["phi", "qwen_lite", "qwen_pro"], index=0)
+
     temperature = st.sidebar.slider("Температура", 0.0, 1.0, 0.0, 0.1)
-    max_tokens_response = st.sidebar.slider("Макс. токенов ответа", 1, 4096, 512, 64)
+    # Числовой ввод максимального количества токенов (целое число)
+    max_tokens_response = int(st.sidebar.number_input("Макс. токенов ответа", min_value=1, max_value=4096, value=512, step=1))
 
     if st.sidebar.button("🗑️ Сбросить диалог"):
         st.session_state.chat_history = []
@@ -37,6 +43,7 @@ elif page == "Чат":
             "prompt": prompt,
             "history": st.session_state.chat_history[:-1],
             "model_alias": model_choice,
+            "ollama_model": ollama_variant,
             "temperature": temperature,
             "max_tokens": max_tokens_response
         }
@@ -57,7 +64,8 @@ elif page == "Чат":
     for msg in st.session_state.chat_history[-30:]:
         with st.chat_message(msg["role"]):
             st.write(msg["text"])
-    st.caption(f"Модель: {model_choice} | Температура: {temperature}")
+    extra = f" (variant={ollama_variant})" if ollama_variant else ""
+    st.caption(f"Модель: {model_choice}{extra} | Температура: {temperature}")
 
 elif page == "История диалога":
     st.title("📜 История диалога")
